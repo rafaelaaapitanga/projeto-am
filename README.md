@@ -1,65 +1,130 @@
-# Projeto Final de Aprendizagem de Máquina, Repositório-Template
+# TabM vs. Gradient Boosting em Dados Tabulares
 
-Estrutura de código de referência para a Etapa 2 do Projeto Final da disciplina de Aprendizagem de Máquina. O template padroniza:
+Projeto final da disciplina de **Aprendizagem de Máquina** (UFPE, 2026.1), em grupo.
+Avaliamos o **TabM** (*Parameter-Efficient Ensembling for Tabular Data*, ICLR 2025) contra os três
+principais modelos de gradient boosting (**LightGBM**, **CatBoost** e **XGBoost**) em 9 datasets
+do benchmark **TabArena-v0.1**.
 
-1. Carregamento de 9 datasets do TabArena-v0.1 (3 small + 3 medium + 3 large).
-2. Implementação dos baselines (LightGBM, CatBoost, XGBoost) via `pytabkit`.
-3. Pipeline de split (70/30 com seed fixa), tuning com Optuna, avaliação das métricas exigidas.
-4. Análise descritiva: tabela média ± desvio por modelo, gráficos de barras e boxplot, análise por regime.
-5. Smoke test que valida os 3 baselines mais o pipeline de gráficos em um dataset pequeno.
+> Este repositório parte do template da disciplina. Aqui estão a implementação do modelo do grupo,
+> os experimentos e a análise dos resultados.
 
-## Status do template
+## Resumo dos resultados
 
-A tabela abaixo indica, para cada componente, o que já está implementado e validado e o que cabe a cada grupo preencher. As convenções são:
+Média sobre os 9 datasets, nos conjuntos de **teste** (split 70/30 estratificado, seed 42):
 
-- **Pronto:** componente implementado e validado por smoke test; nada a fazer.
-- **Esqueleto:** há um arquivo funcional, porém genérico, que cada grupo deve adaptar ao seu modelo.
-- **Placeholder:** há apenas um stub; o grupo precisa implementar.
-- **Ação do aluno:** entrega que não está no template e o grupo deve produzir do zero.
+| Modelo   | AUC (OvO)       | Acurácia        | G-Mean          | Tempo (s, CPU) |
+|----------|-----------------|-----------------|-----------------|----------------|
+| **TabM** | **0,873 ± 0,093** | **0,816 ± 0,119** | **0,694 ± 0,121** | 642,7          |
+| LightGBM | 0,851 ± 0,081   | 0,804 ± 0,109   | 0,580 ± 0,245   | 0,89           |
+| CatBoost | 0,854 ± 0,084   | 0,805 ± 0,112   | 0,581 ± 0,244   | 2,57           |
+| XGBoost  | 0,835 ± 0,094   | 0,797 ± 0,112   | 0,580 ± 0,247   | 1,11           |
 
-| Componente | Status | O que falta |
-|---|---|---|
-| `data/load_tabarena.py`, carregamento via OpenML | Pronto | Substituir `RECOMMENDED_TASK_IDS` (lista provisória de 9 IDs) pela lista oficial escolhida, validando com `summarize()`. |
-| `src/models/baselines.py` (LightGBM, XGBoost, CatBoost via pytabkit) | Pronto | Nada. |
-| `src/models/group_model.py` (modelo principal do grupo) | Placeholder | Implementar `build_group_model(seed)` retornando o estimador atribuído (ver exemplos comentados no próprio arquivo). |
-| `src/pipeline/split.py` (70/30 estratificado) | Pronto | Nada. |
-| `src/pipeline/tune.py` (Optuna, genérico) | Esqueleto | Cada grupo define o `search_space` apropriado para o seu modelo. Para baselines `pytabkit` com defaults TD, o tuning pode ser opcional. |
-| `src/pipeline/evaluate.py` (AUC OvO, ACC, G-Mean, CE, tempo) | Pronto | Nada. |
-| `src/pipeline/regime.py` (quebra por regime) | Pronto | Nada. |
-| `src/pipeline/run_all.py` (orquestrador CLI) | Pronto | Cada grupo passa `--include-group-model` após implementar `group_model.py`. |
-| `src/reports/results_table.py` (resumos e exportação Markdown) | Pronto | Nada. |
-| `src/reports/plots.py` (barras, boxplot, regime, time vs. quality) | Pronto | Nada. |
-| `notebooks/01_eda.ipynb` até `04_analise_resultados.ipynb` | Esqueleto | Executar e adaptar; usar para gerar figuras e tabelas do relatório. |
-| `model_cards/TEMPLATE.md` | Placeholder | Copiar para `model_cards/<seu-modelo>.md` e preencher as 10 seções (detalhes do modelo, uso pretendido, fatores, métricas com IC 95%, dados de avaliação, dados de treino e pré-treino, análise quantitativa, avisos e recomendações, considerações éticas, reprodutibilidade). |
-| `tests/test_pipeline.py` (smoke test) | Pronto | Nada. |
-| Tabela de seleção dos 9 datasets (no relatório) | Ação do aluno | Construir tabela com nome, task ID OpenML, n, n_features, n_classes e regime. |
-| Relatório final em PDF | Esqueleto | Estrutura sugerida em `entregaveis/relatorio-template.pdf`. Substituir placeholders e preencher conforme as exigências da disciplina. |
-| Slides da apresentação (10 minutos: 5 + 5) | Esqueleto | Estrutura sugerida em `entregaveis/slides-template.pdf` (cerca de 12 frames, dois blocos de 5 minutos). |
-| Rubrica de avaliação | Pronto | Disponível em `entregaveis/rubrica.pdf`. Vincula a nota a entregas concretas, decompondo o esquema 40 + 50 + 10 do PDF da disciplina em critérios com pesos específicos. |
+**Principais observações**
 
-## Modelos atribuíveis aos grupos
+- O TabM obteve a melhor média em AUC, acurácia e G-Mean entre os quatro modelos.
+- O custo é alto: em CPU, foi cerca de **250× mais lento** que o CatBoost (642 s contra 2,6 s).
+- Os melhores resultados relativos do TabM apareceram em **datasets pequenos** e em problemas **multiclasse**.
+  Em datasets grandes, os quatro modelos ficaram praticamente empatados (AUC próximo de 0,92 a 0,93).
+- O XGBoost teve o maior AUC no treino, mas o menor no teste, sinal de sobreajuste (*overfitting*) nesses experimentos.
 
-| # | Modelo | Toolkit |
-|---|---|---|
-| 1 | TabPFN-2.5 | `tabpfn` |
-| 2 | TabICL v2 | `tabicl` |
-| 3 | TabM | `pytabkit` |
-| 4 | ModernNCA | `LAMDA-Tabular/TALENT` |
-| 5 | RealMLP | `pytabkit` |
-| 6 | xRFM | `xrfm` |
-| 7 | Mambular | `deeptab` |
-| 8 | FT-Transformer | `pytabkit` ou `deeptab` |
-| 9 | EBM | `interpret` |
-| 10 | Trompt | `pytorch-frame` |
+**Como ler estes números com cuidado**
 
-## Quickstart
+- O desvio-padrão (≈ 0,09) vem principalmente da diferença entre datasets, e as médias dos modelos
+  diferem por pouco (≈ 0,02 de AUC).
+- Usamos um único split (seed 42) e não aplicamos teste estatístico. Os resultados indicam uma tendência,
+  não uma superioridade comprovada.
+
+## O que é o TabM
+
+Redes neurais costumam perder para árvores de decisão em dados tabulares e variam bastante com a
+inicialização aleatória. Um *ensemble* tradicional reduz essa variância, mas exige treinar N redes
+independentes, e o custo cresce linearmente.
+
+O TabM propõe um **ensemble implícito**: um MLP simples em que **k = 32 sub-redes** compartilham a maior
+parte dos pesos, são treinadas ao mesmo tempo e têm suas previsões **combinadas por média**:
+
+```
+ŷ = (1/k) · Σ hᵢ(x),   i = 1..k
+```
+
+A ideia é obter qualidade próxima à de um ensemble com custo próximo ao de uma única rede.
+
+**Pipeline do modelo:** features tabulares → embedding numérico (`none`, `pbld`, `plr`, ou `lt` na análise de sensibilidade)
+→ MLP com pesos compartilhados → k previsões → média → probabilidades por classe.
+
+**Forma de aprendizado:** aprendizado supervisionado (dados rotulados). A retropropagação ocorre
+simultaneamente nas k sub-redes, o que incentiva representações complementares: os erros de cada
+sub-rede tendem a se cancelar, e o resultado fica mais robusto.
+
+## Hiperparâmetros
+
+| Hiperparâmetro | Faixa           | Papel                                   |
+|----------------|-----------------|-----------------------------------------|
+| `k` (cabeças)  | 32              | Número de membros do ensemble           |
+| `lr`           | [1e-4, 1e-2]    | Taxa de aprendizado                     |
+| `n_epochs`     | [50, 200]       | Número de épocas de treinamento         |
+| `dropout`      | [0,0, 0,5]      | Regularização (evita overfitting)       |
+| `weight_decay` | [1e-6, 1e-2]    | Regularização (evita overfitting)       |
+
+**Ajuste de hiperparâmetros:** busca com **Optuna** (métrica: AUC em validação cruzada), com 50 *trials* por dataset
+(menos trials em `connect-4`).
+
+**Análise de sensibilidade:** comparamos o tipo de embedding numérico, o número de cabeças `k` (de 8 a 64)
+e o número de épocas (de 50 a 300). Nos boxplots, o embedding `pbld` teve a maior mediana de AUC,
+`k` intermediário-alto (≈ 40 a 56) tendeu a medianas maiores que valores baixos, e mais épocas não trouxeram
+ganho visível.
+
+## Metodologia
+
+- **Datasets:** 9 do TabArena-v0.1, sendo 3 pequenos (n < 1k), 3 médios (1k a 10k) e 3 grandes (> 10k).
+- **Split:** 70/30 estratificado por classe, `seed = 42`.
+- **Métricas:** AUC (One-vs-One), acurácia, G-Mean, entropia cruzada e tempo total.
+- **Modelos comparados:** TabM, LightGBM, CatBoost e XGBoost (via `pytabkit`, com *tuned defaults*).
+- **Ambiente:** Python 3.11.15, `pytabkit` 1.7.3, `torch` 2.7.1.
+
+| Dataset           | N      | Regime |
+|-------------------|--------|--------|
+| blood-transfusion | 748    | small  |
+| diabetes          | 768    | small  |
+| balance-scale     | 625    | small  |
+| credit-g          | 1.000  | medium |
+| phoneme           | 5.404  | medium |
+| cmc               | 1.473  | medium |
+| adult             | 48.842 | large  |
+| bank-marketing    | 45.211 | large  |
+| connect-4         | 67.557 | large  |
+
+**Melhor AUC em validação cruzada na busca Optuna (TabM):**
+
+| Dataset           | AUC (CV) | Dataset        | AUC (CV) | Dataset   | AUC (CV) |
+|-------------------|----------|----------------|----------|-----------|----------|
+| balance-scale     | 0,9880   | cmc            | 0,7298   | adult     | 0,9141   |
+| blood-transfusion | 0,7617   | credit-g       | 0,7793   | bank-marketing | 0,9392 |
+| diabetes          | 0,8187   | phoneme        | 0,9475   | connect-4 | 0,9259   |
+
+## Aplicações e limitações
+
+**Aplicações práticas:** análise de crédito e *scoring*, detecção de fraude, previsão de *churn*,
+aplicações médicas e de diagnóstico, sistemas de recomendação.
+
+**Limitações:**
+
+- Custo computacional alto (nos nossos testes, em CPU, centenas de vezes mais lento que os modelos de árvores).
+- É uma caixa-preta: não tem interpretabilidade nativa das features.
+- Tende a exigir GPU para ser viável em produção.
+- Menos eficiente em datasets muito grandes sem aceleração.
+
+**Quando usar:** qualidade é prioridade, há GPU disponível e o dataset é pequeno ou médio.
+**Quando evitar:** latência restrita, datasets grandes sem GPU ou interpretabilidade obrigatória.
+
+## Como reproduzir
 
 Pré-requisitos: Python 3.11 ou superior e [`uv`](https://docs.astral.sh/uv/) (recomendado) ou `pip`.
 
 ```bash
 # clonar o repositório
-git clone <url-do-template>
-cd projeto-final-AM-grad
+git clone https://github.com/rafaelaaapitanga/projeto-am.git
+cd projeto-am
 
 # opção A: uv (recomendado)
 uv sync
@@ -67,74 +132,43 @@ uv sync
 # opção B: pip
 pip install -e .
 
-# rodar o smoke test (verifica que cada baseline e os gráficos executam)
+# smoke test: verifica que os baselines e os gráficos executam
 pytest tests/test_pipeline.py -v
-```
 
-Para rodar o experimento completo com o seu modelo atribuído:
-
-```bash
-# editar src/models/group_model.py para apontar para o modelo do grupo
-# rodar o pipeline em todos os 9 datasets:
+# experimento completo (9 datasets, com o TabM)
 python -m src.pipeline.run_all --include-group-model --seed 42
 ```
 
-## Estrutura
+Os resultados por dataset e por modelo são gravados em CSV na pasta `results/`.
+As análises e gráficos estão nos notebooks da pasta `notebooks/`.
+
+## Estrutura do repositório
 
 ```
-projeto-final-AM-grad/
-|- README.md
-|- pyproject.toml
-|- Dockerfile
-|- .python-version
-|- data/
-|   |- load_tabarena.py
+projeto-am/
+|- data/            # carregamento dos datasets (OpenML / TabArena)
 |- src/
-|   |- models/
-|   |   |- baselines.py
-|   |   |- group_model.py
-|   |- pipeline/
-|       |- split.py
-|       |- tune.py
-|       |- evaluate.py
-|       |- regime.py
-|       |- run_all.py
-|   |- reports/
-|       |- results_table.py
-|       |- plots.py
-|- notebooks/
-|   |- 01_eda.ipynb
-|   |- 02_demo_baselines.ipynb
-|   |- 03_demo_modelo_grupo.ipynb
-|   |- 04_analise_resultados.ipynb
-|- model_cards/
-|   |- TEMPLATE.md
-|- docs/
-|   |- INFRAESTRUTURA.md
-|- tests/
-    |- test_pipeline.py
+|   |- models/      # baselines (LightGBM, XGBoost, CatBoost) e modelo do grupo (TabM)
+|   |- pipeline/    # split, tuning (Optuna), avaliação, regimes, orquestrador
+|   |- reports/     # tabelas e gráficos
+|- notebooks/       # EDA, demos e análise de resultados
+|- model_cards/     # documentação do modelo
+|- results/         # resultados em CSV
+|- docs/            # documentação de infraestrutura
+|- tests/           # smoke test
+|- entregaveis/     # relatório, slides e rubrica da disciplina
 ```
 
-## Fluxo de trabalho recomendado
+## Equipe
 
-1. **EDA inicial:** rodar `notebooks/01_eda.ipynb` para inspecionar os 9 datasets.
-2. **Baselines:** rodar `notebooks/02_demo_baselines.ipynb` para confirmar que LightGBM, CatBoost e XGBoost executam end-to-end.
-3. **Modelo do grupo:** implementar o wrapper em `src/models/group_model.py` e validar em `notebooks/03_demo_modelo_grupo.ipynb`.
-4. **Experimento completo:** rodar `python -m src.pipeline.run_all --include-group-model --seed 42`.
-5. **Análise descritiva e por regime:** abrir `notebooks/04_analise_resultados.ipynb` e gerar tabela, barras, boxplot e gráficos por regime.
-6. **Model card:** copiar `model_cards/TEMPLATE.md` para `model_cards/<nome-do-modelo>.md` e preencher.
+Projeto desenvolvido em grupo na disciplina de Aprendizagem de Máquina (UFPE, 2026.1),
+sob orientação do Prof. Leandro Maciel Almeida:
 
-## Reprodutibilidade
+- Aline Acioly
+- Rafaela Pitanga
+- Vlademir Melo
 
-1. Seed fixa em todas as etapas (`split`, `tune`, `evaluate`).
-2. Versões fixadas no `pyproject.toml`.
-3. Dockerfile opcional disponível para containerização.
-4. Saídas intermediárias (resultados por dataset por modelo) são gravadas em CSV em `results/`.
+## Referência
 
-## Licenças
-
-Todas as bibliotecas utilizadas têm licenças permissivas (MIT, Apache 2.0). A única exceção é o modelo TabPFN-2.5, cujos pesos são distribuídos sob licença não-comercial; o uso acadêmico em sala está explicitamente autorizado.
-
-## Suporte
-
-Em caso de dúvida técnica, consulte primeiro `docs/INFRAESTRUTURA.md`. Se a dúvida persistir, abrir issue no repositório do template ou contatar o professor da disciplina.
+Gorishniy, Y. et al. **TabM: Advancing Tabular Deep Learning with Parameter-Efficient Ensembling.**
+ICLR 2025. [arXiv:2410.24210](https://arxiv.org/abs/2410.24210)
